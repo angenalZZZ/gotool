@@ -1,9 +1,9 @@
 package main
 
 const (
-	makeVisibleScript = `setTimeout(function() {
-	document.querySelector('#box1').style.display = '';
-}, 3000);`
+	//	makeVisibleScript = `setTimeout(function() {
+	//	document.querySelector('#box1').style.display = '';
+	//}, 3000);`
 
 	injectCommitForECMA = `function injectCommitForECMA(url)
 {
