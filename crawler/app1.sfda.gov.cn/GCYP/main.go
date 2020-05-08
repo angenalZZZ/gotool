@@ -1,63 +1,61 @@
 package main
 
 import (
-	"github.com/zserge/webview"
+	"context"
+	"flag"
+	"github.com/chromedp/cdproto/runtime"
+	"github.com/chromedp/chromedp"
+	"log"
 )
 
 // go build -ldflags="-H windowsgui" -o ../gcyp.exe ./crawler/app1.sfda.gov.cn/GCYP
 func main() {
-	w := webview.New(false)
-	defer w.Destroy()
+	flag.Parse()
 
-	url := "http://app1.nmpa.gov.cn/datasearchcnda/face3/base.jsp?tableId=25&tableName=TABLE25&title=国产药品&bcId=152904713761213296322795806604"
+	// create context
+	ctx, cancel := chromedp.NewContext(context.Background())
+	defer cancel()
 
-	w.SetSize(800, 600, webview.HintFixed)
-	w.Navigate(url)
-	w.Run()
+	// run task list
+	err := chromedp.Run(ctx, visible(urlTarget))
+	if err != nil {
+		log.Fatal(err)
+	}
+}
 
-	// Create UI with basic HTML passed via data URI
-	//uiInit := "data:text/html," + url.PathEscape(`<html style="background-color:#fff"></html>`)
-	//ui, err := lorca.New(uiInit, "", 1120, 680)
-	////ui, err := lorca.New(uiInit, "", 1120, 680, "--headless") // Hide windows UI
-	//if err != nil {
-	//	log.Fatal(err)
-	//	return
-	//}
-	//defer func() { log.Fatal(ui.Close()) }()
-	//
-	//// Open url
-	//if err = ui.Load(""); err != nil {
-	//	log.Fatal(err)
-	//	return
-	//}
-
-	// Inject javascript
-	// inject_commitForECMA("content.jsp?tableId=25&tableName=TABLE25&tableView=国产药品&Id=1")
-	//ui.Eval(`function inject_commitForECMA(url)
-	//{
-	//	request=createXMLHttp();
-	//	request.onreadystatechange=function () {
-	//		if(request.readyState==4)
-	//		{
-	//			if(request.status==200)
-	//			{
-	//				console.log(request.responseText);
-	//				request=null;
-	//			}
-	//			else
-	//			{
-	//				console.log('服务器未返回数据')
-	//			}
-	//		}
-	//	};
-	//	request.open("GET",url);
-	//	request.setRequestHeader("Content-Type","text/html;encoding=gbk");
-	//	request.send(null);
-	//}`)
-
-	// Get html content
-	//ui.Eval(`window.onload=()=>{ document.body.innerHTML=''; }`)
-
-	// Wait until UI window is closed
-	//<-ui.Done()
+func visible(host string) chromedp.Tasks {
+	return chromedp.Tasks{
+		chromedp.Navigate(host),
+		chromedp.ActionFunc(func(context.Context) error {
+			log.Printf("waiting for " + host)
+			return nil
+		}),
+		chromedp.WaitReady(`body`),
+		chromedp.ActionFunc(func(ctx context.Context) error {
+			v, exp, err := runtime.Evaluate(`document.body.innerHtml`).Do(ctx)
+			if err != nil {
+				return err
+			}
+			if exp != nil {
+				return exp
+			}
+			log.Println(v)
+			return nil
+		}),
+		chromedp.WaitVisible(`#select1`),
+		chromedp.ActionFunc(func(ctx context.Context) error {
+			_, exp, err := runtime.Evaluate(injectCommitForECMA).Do(ctx)
+			if err != nil {
+				return err
+			}
+			if exp != nil {
+				return exp
+			}
+			return nil
+		}),
+		chromedp.ActionFunc(func(context.Context) error {
+			log.Printf(">>>>>>>>>>>>>>>>>>>> injectCommitForECMA OK")
+			return nil
+		}),
+	}
 }
