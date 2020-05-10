@@ -10,7 +10,6 @@ import (
 	"time"
 )
 
-// go build -ldflags="-H windowsgui" -o ../gcyp.exe ./crawler/app1.sfda.gov.cn/GCYP
 func main() {
 	flag.Parse()
 
