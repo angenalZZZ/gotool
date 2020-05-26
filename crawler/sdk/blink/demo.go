@@ -1,20 +1,24 @@
 package main
 
 import (
+	"github.com/angenalZZZ/blink"
 	"github.com/lxn/win"
-	"github.com/raintean/blink"
 	"log"
 	"time"
 )
 
-// go build -ldflags="-H windowsgui" -o ../table25.exe ./crawler/sdk/blink/demo.go
-// go build -tags="bdebug" -ldflags="-H windowsgui" -o ../table25.exe ./crawler/sdk/blink/demo.go
+var mainWebView *blink.WebView
+
+// set GOARCH=386
+// set GOARCH=amd64
+// go build -ldflags="-H windowsgui" -o ../blink.exe ./crawler/sdk/blink/demo.go
+// go build -tags="bdebug" -ldflags="-H windowsgui" -o ../blink.exe ./crawler/sdk/blink/demo.go
 func main() {
 	//urlTarget := "https://www.baidu.com/"
 	urlTarget := "http://app1.nmpa.gov.cn/datasearchcnda/face3/base.jsp?bcId=152904713761213296322795806604&tableId=25&tableName=TABLE25&title=%E5%9B%BD%E4%BA%A7%E8%8D%AF%E5%93%81"
 
-	//启用调试模式
-	//blink.SetDebugMode(true)
+	//调试模式
+	blink.SetDebugMode(false)
 
 	//初始化blink
 	err := blink.InitBlink()
@@ -22,19 +26,22 @@ func main() {
 		log.Fatal(err)
 	}
 
-	view := blink.NewWebView(true,
+	mainWebView = blink.NewWebView(true,
 		1266, 720, // 初始窗口大小
 		int(win.GetSystemMetrics(win.SM_CXSCREEN)/5*4),
 		int(win.GetSystemMetrics(win.SM_CYSCREEN)/5)) // 获取屏幕大小
-	view.LoadURL(urlTarget)
-	view.ShowDockIcon()
-	view.MoveToCenter()
-	view.ShowWindow()
-	view.ToTop()
+	mainWebView.LoadURL(urlTarget)
+	mainWebView.MoveToCenter()
+	mainWebView.ShowDockIcon()
+	mainWebView.ShowWindow()
 	//view.ShowDevTools()
+	mainWebView.ToTop()
+	mainWebView.On("destroy", func(_ *blink.WebView) {
+		mainWebView = nil
+	})
 
 	go func() {
-		title := view.GetWebTitle()
+		title := mainWebView.GetWebTitle()
 		log.Println(title)
 		time.Sleep(3 * time.Second)
 
@@ -63,13 +70,12 @@ func main() {
         request.send(null);
     };`
 
-		log.Println(js)
-		//C.runJSProxy(view.window, C.CString(``))
-		//_, err = view.Invoke(js)
-		//if err != nil {
-		//	log.Fatalln(err)
-		//}
-		//_, err = view.Invoke(`cb2020`, `1`)
+		//log.Println(js)
+		_, err = mainWebView.Eval(js)
+		if err != nil {
+			log.Fatalln(err)
+		}
+		//_, err = mainWebView.Eval(`cb2020(1)`)
 		//if err != nil {
 		//	log.Fatalln(err)
 		//}
