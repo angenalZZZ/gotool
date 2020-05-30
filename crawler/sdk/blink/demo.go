@@ -1,16 +1,14 @@
 package main
 
 import (
-	"github.com/angenalZZZ/blink"
 	"github.com/lxn/win"
+	"github.com/raintean/blink"
 	"log"
-	"time"
 )
 
 var mainWebView *blink.WebView
 
 // set GOARCH=386
-// set GOARCH=amd64
 // go build -ldflags="-H windowsgui" -o ../blink.exe ./crawler/sdk/blink/demo.go
 // go build -tags="bdebug" -ldflags="-H windowsgui" -o ../blink.exe ./crawler/sdk/blink/demo.go
 func main() {
@@ -43,42 +41,9 @@ func main() {
 	go func() {
 		title := mainWebView.GetWebTitle()
 		log.Println(title)
-		time.Sleep(3 * time.Second)
 
-		js := `cb2020=function(id){
-        request=new XMLHttpRequest();
-        request.onreadystatechange=function(){
-            if(request.readyState==4)
-            {
-                if(request.status==200)
-                {
-                    var res=request.responseText;
-                    //console.log(res);
-                    var t=res.substring(res.indexOf("<table "));
-                    t = t.substring(0, t.indexOf("</table>")+8);
-                    alert("服务器正常返回数据:国产药品:Id="+id+"  "+t);
-                    request=null;
-                }
-                else
-                {
-                    alert("服务器未返回数据:国产药品:Id="+id)
-                }
-            }
-        };
-        request.open("GET","content.jsp?tableId=25&tableName=TABLE25&tableView=国产药品&Id="+id);
-        request.setRequestHeader("Content-Type","text/html;encoding=gbk");
-        request.send(null);
-    };`
-
-		//log.Println(js)
-		_, err = mainWebView.Eval(js)
-		if err != nil {
-			log.Fatalln(err)
-		}
-		//_, err = mainWebView.Eval(`cb2020(1)`)
-		//if err != nil {
-		//	log.Fatalln(err)
-		//}
+		mainWebView.Inject("title", "document.title")
+		//mainWebView.Invoke()
 	}()
 
 	<-make(chan struct{})
