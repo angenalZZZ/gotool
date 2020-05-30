@@ -3,17 +3,48 @@ package main
 import (
 	"github.com/lxn/win"
 	"github.com/raintean/blink"
+	"io/ioutil"
 	"log"
+	"os"
+	"strings"
+	"time"
 )
 
-var mainWebView *blink.WebView
-
-// set GOARCH=386
-// go build -ldflags="-H windowsgui" -o ../blink.exe ./crawler/sdk/blink/demo.go
-// go build -tags="bdebug" -ldflags="-H windowsgui" -o ../blink.exe ./crawler/sdk/blink/demo.go
+// set GOARCH=386 // option
+// go build -ldflags="-s -w -H windowsgui" -o ../demo.exe ./crawler/sdk/blink/demo.go
+// go build -tags="bdebug" -ldflags="-s -w -H windowsgui" -o ../demo.exe ./crawler/sdk/blink/demo.go
+// demo.exe "http://app1.nmpa.gov.cn/datasearchcnda/face3/base.jsp?tableId=25&tableName=TABLE25&title=%B9%FA%B2%FA%D2%A9%C6%B7&bcId=152904713761213296322795806604" "A:\go\src\github.com\angenalZZZ\gotool\crawler\sdk\blink\demo.js"
 func main() {
-	//urlTarget := "https://www.baidu.com/"
-	urlTarget := "http://app1.nmpa.gov.cn/datasearchcnda/face3/base.jsp?bcId=152904713761213296322795806604&tableId=25&tableName=TABLE25&title=%E5%9B%BD%E4%BA%A7%E8%8D%AF%E5%93%81"
+	var (
+		hasUri      bool
+		urlTarget   string
+		jsTarget    string
+		mainWebView *blink.WebView
+	)
+
+	if len(os.Args) > 1 {
+		if strings.Index(os.Args[1], "http") == 0 {
+			hasUri, urlTarget = true, os.Args[1]
+		}
+		if len(os.Args) > 2 {
+			jsTarget = os.Args[2]
+		} else {
+			jsTarget = os.Args[1]
+		}
+		if fi, err := os.Stat(jsTarget); err == nil && !fi.IsDir() {
+			jsTargetBytes, err := ioutil.ReadFile(jsTarget)
+			if err != nil {
+				log.Fatal(err)
+				return
+			}
+			jsTarget = string(jsTargetBytes)
+		}
+	}
+
+	// set default url
+	if hasUri == false {
+		urlTarget = "https://www.baidu.com"
+	}
 
 	//调试模式
 	blink.SetDebugMode(false)
@@ -22,29 +53,41 @@ func main() {
 	err := blink.InitBlink()
 	if err != nil {
 		log.Fatal(err)
+		return
 	}
 
+	done := make(chan struct{})
 	mainWebView = blink.NewWebView(true,
 		1266, 720, // 初始窗口大小
 		int(win.GetSystemMetrics(win.SM_CXSCREEN)/5*4),
 		int(win.GetSystemMetrics(win.SM_CYSCREEN)/5)) // 获取屏幕大小
-	mainWebView.LoadURL(urlTarget)
+
+	//mainWebView.ShowDockIcon()
 	mainWebView.MoveToCenter()
-	mainWebView.ShowDockIcon()
 	mainWebView.ShowWindow()
-	//view.ShowDevTools()
 	mainWebView.ToTop()
+	mainWebView.LoadURL(urlTarget)
+
+	// view.ShowDevTools()
 	mainWebView.On("destroy", func(_ *blink.WebView) {
 		mainWebView = nil
 	})
 
-	go func() {
-		title := mainWebView.GetWebTitle()
-		log.Println(title)
+	// await BlinkFunc.CloseWebPage()
+	mainWebView.Inject("CloseWebPage", func() (int, error) {
+		close(done) // exit
+		return 0, nil
+	})
 
-		mainWebView.Inject("title", "document.title")
-		//mainWebView.Invoke()
+	go func() {
+		_ = mainWebView.GetWebTitle()
+		if jsTarget != "" {
+			//log.Println(jsTarget)
+			time.Sleep(2 * time.Second)
+			_, _ = mainWebView.Invoke(jsTarget)
+		}
 	}()
 
-	<-make(chan struct{})
+	// set exit
+	<-done
 }
