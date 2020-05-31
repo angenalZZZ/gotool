@@ -22,8 +22,10 @@ func main() {
 		handler = fasthttp.CompressHandler(handler)
 	}
 
+	ReleaseCacheSec = 100
 	CacheSaveToFile = 10 * time.Second
 	go CacheWriteBackgroundWorker()
+	go CacheReadBackgroundWorker()
 
 	if err := fasthttp.ListenAndServe(*addr, handler); err == nil {
 		log.Printf("Listen And Serve: %s", *addr)
