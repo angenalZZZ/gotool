@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
 	"github.com/VictoriaMetrics/fastcache"
-	"io/ioutil"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -22,10 +22,11 @@ type CacheWriter struct {
 }
 
 var (
-	ReleaseCacheSec  = 100
+	//ReleaseCacheSec  = 100
 	CacheSaveToFile  = time.Minute
 	CacheWriterIndex = time.Now().Unix()
 	CacheWriteMapper = map[int64]*CacheWriter{}
+	CacheDataDirName = GetCurrentDir()
 	CacheDataFileExt = "dat"
 )
 
@@ -57,35 +58,39 @@ func CacheWriteBackgroundWorker() {
 
 func CacheReadBackgroundWorker() {
 	time.Sleep(time.Microsecond)
+
 	// load old data
-	oldFiles, _ := filepath.Glob("*" + CacheDataFileExt)
+	oldFiles, _ := filepath.Glob(filepath.Join(CacheDataDirName, "*"+CacheDataFileExt))
 	for _, oldFile := range oldFiles {
 		_, f := filepath.Split(oldFile)
 		s := strings.Split(f, ".")
 		start, _ := strconv.ParseInt(s[0], 10, 0)
 		index, _ := strconv.ParseInt(s[1], 10, 0)
+		cache, err := fastcache.LoadFromFile(oldFile)
+		if err != nil || cache == nil {
+			continue
+		}
 		writer := &CacheWriter{
-			Cache: fastcache.New(4),
+			Cache: cache,
 			Done:  make(chan struct{}),
 			Start: start,
 			Index: uint32(index),
 		}
-		writer.Cache.Reset()
 		CacheWriteMapper[start] = writer
 	}
+
 	// read new data
 	for {
 		for _, c := range CacheWriteMapper {
-			var i uint32 = 1
-			for ; i <= c.Index; i++ {
+			for i := uint32(1); i <= c.Index; i++ {
 				dst := make([]byte, 0)
 				v := c.Get(dst, FromInt(i))
 				// Load the HTML document
 				r := bytes.NewBuffer(v)
 				doc, err := goquery.NewDocumentFromReader(r)
 				if err != nil {
-					f := c.filename()
-					_ = ioutil.WriteFile(f+".err", []byte(err.Error()), 0644)
+					//f := c.filename()
+					//_ = ioutil.WriteFile(f+".err", []byte(err.Error()), 0644)
 				}
 				// Find the review items
 				doc.Find(".sidebar-reviews article .content-block").Each(func(i int, s *goquery.Selection) {
@@ -114,12 +119,12 @@ func (c *CacheWriter) Write(p []byte) (n int, err error) {
 }
 
 func (c *CacheWriter) filename() string {
-	return fmt.Sprintf("%d.%d.%s", c.Start, c.Index, CacheDataFileExt)
+	return filepath.Join(CacheDataDirName, fmt.Sprintf("%d.%d.%s", c.Start, c.Index, CacheDataFileExt))
 }
 
-func (c *CacheWriter) writeError(err error) {
-	_ = ioutil.WriteFile(c.filename()+".log", []byte(err.Error()), 0644)
-}
+//func (c *CacheWriter) writeError(err error) {
+//	_ = ioutil.WriteFile(c.filename()+".log", []byte(err.Error()), 0644)
+//}
 
 func (c *CacheWriter) saveWorker() {
 	for {
@@ -127,8 +132,8 @@ func (c *CacheWriter) saveWorker() {
 		case <-c.Done:
 			time.Sleep(time.Microsecond)
 			if c.Index > 0 {
-				if err := c.Cache.SaveToFile(c.filename()); err != nil {
-					c.writeError(err)
+				if err := c.Cache.SaveToFileConcurrent(c.filename(), 0); err != nil {
+					//c.writeError(err)
 				}
 			}
 			return
@@ -136,14 +141,21 @@ func (c *CacheWriter) saveWorker() {
 	}
 }
 
-// helper function which converts a int to a []byte in Big Endian
+// GetCurrentDir helper function
+func GetCurrentDir() (basePath string) {
+	basePath, _ = filepath.Abs(os.Args[0])
+	basePath = filepath.Dir(basePath)
+	return
+}
+
+// FromInt helper function which converts a int to a []byte in Big Endian
 func FromInt(v uint32) []byte {
 	b := make([]byte, 4)
 	binary.BigEndian.PutUint32(b, v)
 	return b
 }
 
-// helper function which converts a big endian []byte to an int
+// ToInt helper function which converts a big endian []byte to an int
 func ToInt(data []byte) uint32 {
 	v := binary.BigEndian.Uint32(data)
 	return v
