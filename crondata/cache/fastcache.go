@@ -22,7 +22,9 @@ type CacheWriter struct {
 }
 
 var (
-	//ReleaseCacheSec  = 100
+	ReleaseCacheNum  = 60000
+	ReleaseCacheDur  = time.Minute
+	CacheMaxBytes    = 1024
 	CacheSaveToFile  = time.Minute
 	CacheWriterIndex = time.Now().Unix()
 	CacheWriteMapper = map[int64]*CacheWriter{}
@@ -30,35 +32,51 @@ var (
 	CacheDataFileExt = "dat"
 )
 
-func CacheWriteBackgroundWorker() {
-	time.Sleep(time.Second)
-	for {
-		start := time.Now().Unix()
-		end := start + int64(CacheSaveToFile.Seconds())
-		tOk := start <= CacheWriterIndex && CacheWriterIndex <= end
+func CacheBackgroundWorker() {
+	readReady := make(chan struct{})
+	go cacheReadBackgroundWorker(readReady)
+	go cacheWriteBackgroundWorker(readReady)
+}
 
-		if tOk == false {
-			CacheWriteMapper[CacheWriterIndex].Done <- struct{}{}
-			atomic.StoreInt64(&CacheWriterIndex, start)
+func cacheWriteBackgroundWorker(readReady <-chan struct{}) {
+	<-readReady
+	start := time.Now().Unix()
+	if _, ok := CacheWriteMapper[start]; ok == false {
+		CacheWriteMapper[start] = &CacheWriter{
+			Cache: fastcache.New(CacheMaxBytes),
+			Done:  make(chan struct{}),
+			Start: start,
+			Index: 0,
 		}
+		go CacheWriteMapper[start].saveWorker()
+	}
+	CacheWriterIndex = start
+	itemSeconds := int64(CacheSaveToFile.Seconds())
+	NextWriterIndex := start + itemSeconds
+	fmt.Println("waiting input new cache data ...")
 
-		if _, ok := CacheWriteMapper[CacheWriterIndex]; ok == false {
-			CacheWriteMapper[CacheWriterIndex] = &CacheWriter{
-				Cache: fastcache.New(4),
+	for {
+		time.Sleep(time.Microsecond)
+		start = time.Now().Unix()
+		next := NextWriterIndex
+		if start >= next {
+			CacheWriteMapper[CacheWriterIndex].Done <- struct{}{}
+			atomic.StoreInt64(&CacheWriterIndex, NextWriterIndex)
+			NextWriterIndex += itemSeconds
+		}
+		if _, ok := CacheWriteMapper[next]; ok == false {
+			CacheWriteMapper[next] = &CacheWriter{
+				Cache: fastcache.New(CacheMaxBytes),
 				Done:  make(chan struct{}),
-				Start: start,
+				Start: next,
 				Index: 0,
 			}
-			go CacheWriteMapper[CacheWriterIndex].saveWorker()
+			go CacheWriteMapper[next].saveWorker()
 		}
-
-		time.Sleep(time.Microsecond)
 	}
 }
 
-func CacheReadBackgroundWorker() {
-	time.Sleep(time.Microsecond)
-
+func cacheReadBackgroundWorker(readReady chan<- struct{}) {
 	// load old data
 	oldFiles, _ := filepath.Glob(filepath.Join(CacheDataDirName, "*"+CacheDataFileExt))
 	for _, oldFile := range oldFiles {
@@ -72,44 +90,66 @@ func CacheReadBackgroundWorker() {
 		}
 		writer := &CacheWriter{
 			Cache: cache,
-			Done:  make(chan struct{}),
 			Start: start,
 			Index: uint32(index),
 		}
 		CacheWriteMapper[start] = writer
 	}
+	if len(CacheWriteMapper) > 0 {
+		fmt.Println("loaded old cache data ...")
+	}
 
 	// read new data
+	readReady <- struct{}{}
 	for {
-		for _, c := range CacheWriteMapper {
-			for i := uint32(1); i <= c.Index; i++ {
-				dst := make([]byte, 0)
-				v := c.Get(dst, FromInt(i))
-				// Load the HTML document
-				r := bytes.NewBuffer(v)
-				doc, err := goquery.NewDocumentFromReader(r)
-				if err != nil {
-					//f := c.filename()
-					//_ = ioutil.WriteFile(f+".err", []byte(err.Error()), 0644)
-				}
-				// Find the review items
-				doc.Find(".sidebar-reviews article .content-block").Each(func(i int, s *goquery.Selection) {
-					band := s.Find("a").Text()
-					title := s.Find("i").Text()
-					fmt.Printf("Review %d: %s - %s\n", i, band, title)
-				})
-			}
-		}
-
 		time.Sleep(time.Microsecond)
+		t, m := time.Now().Add(ReleaseCacheDur), ReleaseCacheNum
+		for start, c := range CacheWriteMapper {
+			if m <= 0 || c == nil || start >= time.Now().Unix() {
+				continue
+			}
+			m -= c.ReadAll(t, uint32(m))
+		}
+		if d := t.Sub(time.Now()); d.Milliseconds() > 0 {
+			time.Sleep(d)
+		}
 	}
 }
 
 func GetCacheWriter() *CacheWriter {
-	if _, ok := CacheWriteMapper[CacheWriterIndex]; ok == false {
-		time.Sleep(time.Microsecond)
-	}
 	return CacheWriteMapper[CacheWriterIndex]
+}
+
+func (c *CacheWriter) ReadAll(endTime time.Time, maxNum uint32) (count int) {
+	count = 0
+	for i := uint32(1); i <= c.Index && i <= maxNum; i++ {
+		dst := make([]byte, 0)
+		buf := c.Get(dst, FromInt(i))
+		if len(buf) <= 0 {
+			count++
+			continue
+		}
+
+		// Load the HTML document
+		r := bytes.NewBuffer(buf)
+		doc, err := goquery.NewDocumentFromReader(r)
+		if err != nil {
+			//f := c.filename()
+			//_ = ioutil.WriteFile(f+".err", []byte(err.Error()), 0644)
+		}
+
+		fmt.Println(doc)
+
+		// Find the review items
+		//doc.Find(".sidebar-reviews article .content-block").Each(func(i int, s *goquery.Selection) {
+		//	band := s.Find("a").Text()
+		//	title := s.Find("i").Text()
+		//	fmt.Printf("Review %d: %s - %s\n", i, band, title)
+		//})
+
+		count++
+	}
+	return
 }
 
 func (c *CacheWriter) Write(p []byte) (n int, err error) {
@@ -130,7 +170,7 @@ func (c *CacheWriter) saveWorker() {
 	for {
 		select {
 		case <-c.Done:
-			time.Sleep(time.Microsecond)
+			time.Sleep(time.Second)
 			if c.Index > 0 {
 				if err := c.Cache.SaveToFileConcurrent(c.filename(), 0); err != nil {
 					//c.writeError(err)
