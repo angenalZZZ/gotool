@@ -7,6 +7,9 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"github.com/VictoriaMetrics/fastcache"
 	"io/ioutil"
+	"path/filepath"
+	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 )
@@ -23,6 +26,7 @@ var (
 	CacheSaveToFile  = time.Minute
 	CacheWriterIndex = time.Now().Unix()
 	CacheWriteMapper = map[int64]*CacheWriter{}
+	CacheDataFileExt = "dat"
 )
 
 func CacheWriteBackgroundWorker() {
@@ -54,7 +58,22 @@ func CacheWriteBackgroundWorker() {
 func CacheReadBackgroundWorker() {
 	time.Sleep(time.Microsecond)
 	// load old data
-
+	oldFiles, _ := filepath.Glob("*" + CacheDataFileExt)
+	for _, oldFile := range oldFiles {
+		_, f := filepath.Split(oldFile)
+		s := strings.Split(f, ".")
+		start, _ := strconv.ParseInt(s[0], 10, 0)
+		index, _ := strconv.ParseInt(s[1], 10, 0)
+		writer := &CacheWriter{
+			Cache: fastcache.New(4),
+			Done:  make(chan struct{}),
+			Start: start,
+			Index: uint32(index),
+		}
+		writer.Cache.Reset()
+		CacheWriteMapper[start] = writer
+	}
+	// read new data
 	for {
 		for _, c := range CacheWriteMapper {
 			var i uint32 = 1
@@ -95,11 +114,11 @@ func (c *CacheWriter) Write(p []byte) (n int, err error) {
 }
 
 func (c *CacheWriter) filename() string {
-	return fmt.Sprintf("%d.%d.dat", c.Start, c.Index)
+	return fmt.Sprintf("%d.%d.%s", c.Start, c.Index, CacheDataFileExt)
 }
 
 func (c *CacheWriter) writeError(err error) {
-	_ = ioutil.WriteFile(c.filename()+".err", []byte(err.Error()), 0644)
+	_ = ioutil.WriteFile(c.filename()+".log", []byte(err.Error()), 0644)
 }
 
 func (c *CacheWriter) saveWorker() {
