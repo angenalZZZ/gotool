@@ -5,7 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
-	"github.com/VictoriaMetrics/fastcache"
+	"github.com/angenalZZZ/gofunc/data/cache/fastcache"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -121,8 +121,12 @@ func GetCacheWriter() *CacheWriter {
 }
 
 func (c *CacheWriter) ReadAll(endTime time.Time, maxNum uint32) (count int) {
-	count = 0
+	endTimeUnix := endTime.Unix()
 	for i := uint32(1); i <= c.Index && i <= maxNum; i++ {
+		if time.Now().Unix() >= endTimeUnix {
+			return
+		}
+
 		dst := make([]byte, 0)
 		buf := c.Get(dst, FromInt(i))
 		if len(buf) <= 0 {
