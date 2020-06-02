@@ -17,7 +17,7 @@ func TestCacheDirName(t *testing.T) {
 	t.Log(basePath)
 }
 
-func BenchmarkGetCacheWriter(b *testing.B) {
+func BenchmarkCacheWriter(b *testing.B) {
 	b.StopTimer()
 	CacheSaveToFile = 10 * time.Second
 	CacheBackgroundWorker()
