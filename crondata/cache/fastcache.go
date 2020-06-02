@@ -32,13 +32,15 @@ var (
 	CacheDataFileExt = "dat"
 )
 
-func CacheBackgroundWorker() {
-	readReady := make(chan struct{})
+func InitCacheBackgroundWorker(cacheSaveToFile time.Duration) {
+	CacheSaveToFile = cacheSaveToFile
+	readReady, writerReady := make(chan struct{}), make(chan struct{})
 	go cacheReadBackgroundWorker(readReady)
-	go cacheWriteBackgroundWorker(readReady)
+	go cacheWriteBackgroundWorker(readReady, writerReady)
+	<-writerReady
 }
 
-func cacheWriteBackgroundWorker(readReady <-chan struct{}) {
+func cacheWriteBackgroundWorker(readReady <-chan struct{}, writerReady chan<- struct{}) {
 	<-readReady
 	start := time.Now().Unix()
 	if _, ok := CacheWriteMapper[start]; ok == false {
@@ -53,7 +55,8 @@ func cacheWriteBackgroundWorker(readReady <-chan struct{}) {
 	CacheWriterIndex = start
 	itemSeconds := int64(CacheSaveToFile.Seconds())
 	NextWriterIndex := start + itemSeconds
-	fmt.Println("waiting input new cache data ...")
+	writerReady <- struct{}{}
+	//fmt.Println("waiting input new cache data ...")
 
 	for {
 		time.Sleep(time.Microsecond)
@@ -96,7 +99,7 @@ func cacheReadBackgroundWorker(readReady chan<- struct{}) {
 		CacheWriteMapper[start] = writer
 	}
 	if len(CacheWriteMapper) > 0 {
-		fmt.Println("loaded old cache data ...")
+		//fmt.Println("loaded old cache data ...")
 	}
 
 	// read new data
@@ -136,13 +139,14 @@ func (c *CacheWriter) ReadAll(endTime time.Time, maxNum uint32) (count int) {
 
 		// Load the HTML document
 		r := bytes.NewBuffer(buf)
-		doc, err := goquery.NewDocumentFromReader(r)
+		_, err := goquery.NewDocumentFromReader(r)
 		if err != nil {
+			_, _ = fmt.Fprint(os.Stderr, err)
 			//f := c.filename()
 			//_ = ioutil.WriteFile(f+".err", []byte(err.Error()), 0644)
 		}
 
-		fmt.Println(doc)
+		//fmt.Println(doc)
 
 		// Find the review items
 		//doc.Find(".sidebar-reviews article .content-block").Each(func(i int, s *goquery.Selection) {
