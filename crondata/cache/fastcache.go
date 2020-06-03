@@ -22,18 +22,25 @@ type CacheWriter struct {
 }
 
 var (
-	ReleaseCacheNum  = 60000
-	ReleaseCacheDur  = time.Minute
-	CacheMaxBytes    = 1024
-	CacheSaveToFile  = time.Minute
+	// maxBytes must be smaller than the available RAM size for the app,
+	// since the cache holds data in memory.
+	// If maxBytes is less than 32MB, then the minimum cache capacity is 32MB.
+	CacheMaxBytes    = 1024 // default 1GB RAM size
 	CacheWriterIndex = time.Now().Unix()
 	CacheWriteMapper = map[int64]*CacheWriter{}
-	CacheDataDirName = GetCurrentDir()
 	CacheDataFileExt = "dat"
+	// cache persist to disk directory
+	CacheDataDirName = GetCurrentDir()
+	// period of cache, beyond which it will be automatically persisted to disk
+	CacheRenewFile = time.Minute
+	// cycle of message processing
+	ReleaseInterval = time.Minute
+	// maximum number of messages that can be processed
+	ReleaseMaxNumber = 60000
 )
 
-func InitCacheBackgroundWorker(cacheSaveToFile time.Duration) {
-	CacheSaveToFile = cacheSaveToFile
+func InitCacheBackgroundWorker(renew time.Duration) {
+	CacheRenewFile = renew
 	readReady, writerReady := make(chan struct{}), make(chan struct{})
 	go cacheReadBackgroundWorker(readReady)
 	go cacheWriteBackgroundWorker(readReady, writerReady)
@@ -53,7 +60,7 @@ func cacheWriteBackgroundWorker(readReady <-chan struct{}, writerReady chan<- st
 		go CacheWriteMapper[start].saveWorker()
 	}
 	CacheWriterIndex = start
-	itemSeconds := int64(CacheSaveToFile.Seconds())
+	itemSeconds := int64(CacheRenewFile.Seconds())
 	NextWriterIndex := start + itemSeconds
 	writerReady <- struct{}{}
 	//fmt.Println("waiting input new cache data ...")
@@ -106,7 +113,7 @@ func cacheReadBackgroundWorker(readReady chan<- struct{}) {
 	readReady <- struct{}{}
 	for {
 		time.Sleep(time.Microsecond)
-		t, m := time.Now().Add(ReleaseCacheDur), ReleaseCacheNum
+		t, m := time.Now().Add(ReleaseInterval), ReleaseMaxNumber
 		for start, c := range CacheWriteMapper {
 			if m <= 0 || c == nil || start >= time.Now().Unix() {
 				continue
