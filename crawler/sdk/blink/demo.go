@@ -1,49 +1,62 @@
 package main
 
+import "C"
 import (
+	"flag"
+	"fmt"
 	"github.com/lxn/win"
 	"github.com/raintean/blink"
 	"io/ioutil"
 	"log"
+	"net/url"
 	"os"
-	"strings"
 	"time"
 )
 
 // set GOARCH=386 // option
-// go build -ldflags="-s -w -H windowsgui" -o ../demo.exe ./crawler/sdk/blink/demo.go
-// go build -tags="bdebug" -ldflags="-s -w -H windowsgui" -o ../demo.exe ./crawler/sdk/blink/demo.go
-// demo.exe "http://app1.nmpa.gov.cn/datasearchcnda/face3/base.jsp?tableId=25&tableName=TABLE25&title=%B9%FA%B2%FA%D2%A9%C6%B7&bcId=152904713761213296322795806604" "A:\go\src\github.com\angenalZZZ\gotool\crawler\sdk\blink\demo.js"
+// go build -ldflags="-s -w -H windowsgui" -o ../ejs.exe ./crawler/sdk/blink/demo.go
+// go build -tags="bdebug" -ldflags="-s -w -H windowsgui" -o ../ejs.exe ./crawler/sdk/blink/demo.go
+// ejs.exe "http://app1.nmpa.gov.cn/datasearchcnda/face3/base.jsp?tableId=25&tableName=TABLE25&title=%B9%FA%B2%FA%D2%A9%C6%B7&bcId=152904713761213296322795806604" "A:\go\src\github.com\angenalZZZ\gotool\crawler\sdk\blink\demo.js"
 func main() {
-	var (
-		hasUri      bool
-		urlTarget   string
-		jsTarget    string
-		mainWebView *blink.WebView
-	)
+	flag.Usage = func() {
+		fmt.Fprintln(os.Stderr)
+		fmt.Fprintf(os.Stderr, "ejs eval js expression in the context of a web page\n")
+		fmt.Fprintf(os.Stderr, "running in a headless instance of the Web browser.\n\n")
+		fmt.Fprintf(os.Stderr, "Usage:\n\n")
+		fmt.Fprintf(os.Stderr, "\tejs url script-file\n\n")
+		fmt.Fprintf(os.Stderr, "url is the web page to execute the script in, and script-file is a local file\n")
+		fmt.Fprintf(os.Stderr, "with the JavaScript you want to evaluate.\n\n")
+		fmt.Fprintln(os.Stderr)
+		fmt.Fprintf(os.Stderr, "Example usage:\n\n")
+		fmt.Fprintf(os.Stderr, "\tTo return the value of `document.title` on https://www.baidu.com:\n")
+		fmt.Fprintf(os.Stderr, "\t    $ echo document.title | ejs https://www.baidu.com /dev/stdin\n")
+		fmt.Fprintln(os.Stderr)
+		os.Exit(1)
+	}
+	flag.Parse()
 
-	if len(os.Args) > 1 {
-		if strings.Index(os.Args[1], "http") == 0 {
-			hasUri, urlTarget = true, os.Args[1]
-		}
-		if len(os.Args) > 2 {
-			jsTarget = os.Args[2]
-		} else {
-			jsTarget = os.Args[1]
-		}
-		if fi, err := os.Stat(jsTarget); err == nil && !fi.IsDir() {
-			jsTargetBytes, err := ioutil.ReadFile(jsTarget)
-			if err != nil {
-				log.Fatal(err)
-				return
-			}
-			jsTarget = string(jsTargetBytes)
-		}
+	if flag.NArg() != 2 {
+		flag.Usage()
+		os.Exit(1)
 	}
 
-	// set default url
-	if hasUri == false {
-		urlTarget = "https://www.baidu.com"
+	logErr := log.New(os.Stderr, "", 0)
+
+	pageURL := flag.Arg(0)
+	script, scriptFile := "", flag.Arg(1)
+
+	if _, err := url.Parse(pageURL); err != nil {
+		logErr.Fatalf("Failed to parse URL %q: %s", pageURL, err)
+		return
+	}
+
+	if fi, err := os.Stat(scriptFile); err == nil && !fi.IsDir() {
+		jsTargetBytes, err := ioutil.ReadFile(scriptFile)
+		if err != nil {
+			logErr.Fatalf("Failed to open script file %q: %s", scriptFile, err)
+			return
+		}
+		script = string(jsTargetBytes)
 	}
 
 	//调试模式
@@ -57,7 +70,7 @@ func main() {
 	}
 
 	done := make(chan struct{})
-	mainWebView = blink.NewWebView(true,
+	mainWebView := blink.NewWebView(true,
 		1266, 720, // 初始窗口大小
 		int(win.GetSystemMetrics(win.SM_CXSCREEN)/5*4),
 		int(win.GetSystemMetrics(win.SM_CYSCREEN)/5)) // 获取屏幕大小
@@ -66,7 +79,7 @@ func main() {
 	mainWebView.MoveToCenter()
 	mainWebView.ShowWindow()
 	mainWebView.ToTop()
-	mainWebView.LoadURL(urlTarget)
+	mainWebView.LoadURL(pageURL)
 
 	// view.ShowDevTools()
 	mainWebView.On("destroy", func(_ *blink.WebView) {
@@ -81,10 +94,13 @@ func main() {
 
 	go func() {
 		_ = mainWebView.GetWebTitle()
-		if jsTarget != "" {
-			//log.Println(jsTarget)
+		if script != "" {
 			time.Sleep(2 * time.Second)
-			_, _ = mainWebView.Invoke(jsTarget)
+			if result, err := mainWebView.Invoke(script); err != nil {
+				logErr.Print(err)
+			} else {
+				fmt.Println(result)
+			}
 		}
 	}()
 
