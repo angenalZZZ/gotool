@@ -4,7 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"github.com/valyala/fasthttp"
-	"log"
 	"strconv"
 	"time"
 )
@@ -14,20 +13,24 @@ var (
 	compress = flag.Bool("compress", false, "Whether to enable transparent response compression")
 )
 
+// go build -ldflags="-s -w" -o ../token.exe github.com/angenalZZZ/gotool/crondata/cache
 func main() {
 	flag.Parse()
+	fmt.Println("Parse args ...")
+	fmt.Printf(" addr = %q \n", *addr)
+	fmt.Printf(" compress = %t \n", *compress)
 
 	handler := requestHandler
 	if *compress {
 		handler = fasthttp.CompressHandler(handler)
 	}
 
-	InitCacheBackgroundWorker(10 * time.Second)
+	fmt.Println("Init cache ...")
+	InitCacheBackgroundWorker(time.Minute)
 
-	if err := fasthttp.ListenAndServe(*addr, handler); err == nil {
-		log.Printf("Listen And Serve: %s", *addr)
-	} else {
-		log.Fatalf("Error in Listen And Serve: %s", err)
+	fmt.Println("Start listen and serve ...")
+	if err := fasthttp.ListenAndServe(*addr, handler); err != nil {
+		fmt.Printf("Error in listen and serve: %s \n", err)
 	}
 }
 
