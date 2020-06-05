@@ -2,6 +2,9 @@ package main
 
 import (
 	"github.com/angenalZZZ/gofunc/data/random"
+	"path/filepath"
+	"regexp"
+	"sort"
 	"testing"
 	"time"
 )
@@ -20,5 +23,30 @@ func BenchmarkCacheWriter(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		w := GetCacheWriter()
 		_, _ = w.Write(p)
+	}
+}
+
+func TestReadDirs(t *testing.T) {
+	p := `A:\Go\src\github.com\angenalZZZ`
+	oldFiles, _ := filepath.Glob(filepath.Join(p, "*"))
+	sort.Strings(oldFiles)
+	for _, oldFile := range oldFiles {
+		_, f := filepath.Split(oldFile)
+		if ok, _ := regexp.MatchString(`^\d{10,}\.\d+`, f); !ok {
+			continue
+		}
+		t.Log(oldFile)
+		//s := strings.Split(f, ".")
+		//start, _ := strconv.ParseInt(s[0], 10, 0)
+		//index, _ := strconv.ParseInt(s[1], 10, 0)
+		//cache, err := fastcache.LoadFromFile(oldFile)
+		//if err != nil || cache == nil {
+		//	continue
+		//}
+		//writer := &CacheWriter{
+		//	Cache: cache,
+		//	Start: start,
+		//	Index: uint32(index),
+		//}
 	}
 }

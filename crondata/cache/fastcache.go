@@ -6,8 +6,11 @@ import (
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
 	"github.com/angenalZZZ/gofunc/data/cache/fastcache"
+	"github.com/angenalZZZ/gofunc/data/queue"
+	"github.com/angenalZZZ/gofunc/f"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -28,7 +31,6 @@ var (
 	CacheMaxBytes    = 1024 // default 1GB RAM size
 	CacheWriterIndex = time.Now().Unix()
 	CacheWriteMapper = map[int64]*CacheWriter{}
-	CacheDataFileExt = "dat"
 	// cache persist to disk directory
 	CacheDataDirName = GetCurrentDir()
 	// period of cache, beyond which it will be automatically persisted to disk
@@ -88,9 +90,12 @@ func cacheWriteBackgroundWorker(readReady <-chan struct{}, writerReady chan<- st
 
 func cacheReadBackgroundWorker(readReady chan<- struct{}) {
 	// load old data
-	oldFiles, _ := filepath.Glob(filepath.Join(CacheDataDirName, "*"+CacheDataFileExt))
+	oldFiles, _ := filepath.Glob(filepath.Join(CacheDataDirName, "*"))
 	for _, oldFile := range oldFiles {
 		_, f := filepath.Split(oldFile)
+		if ok, _ := regexp.MatchString(`^\d{10}\.\d+`, f); !ok {
+			continue
+		}
 		s := strings.Split(f, ".")
 		start, _ := strconv.ParseInt(s[0], 10, 0)
 		index, _ := strconv.ParseInt(s[1], 10, 0)
@@ -115,7 +120,7 @@ func cacheReadBackgroundWorker(readReady chan<- struct{}) {
 		time.Sleep(time.Microsecond)
 		t, m := time.Now().Add(ReleaseInterval), ReleaseMaxNumber
 		for start, c := range CacheWriteMapper {
-			if m <= 0 || c == nil || start >= time.Now().Unix() {
+			if start >= time.Now().Unix() {
 				continue
 			}
 			m -= c.ReadAll(t, uint32(m))
@@ -174,22 +179,23 @@ func (c *CacheWriter) Write(p []byte) (n int, err error) {
 }
 
 func (c *CacheWriter) filename() string {
-	return filepath.Join(CacheDataDirName, fmt.Sprintf("%d.%d.%s", c.Start, c.Index, CacheDataFileExt))
+	t := f.TimeStampFrom(f.ToString(c.Start)).LocalTimeStampString()[0:14]
+	return filepath.Join(CacheDataDirName, fmt.Sprintf("%s.%d", t, c.Index))
 }
-
-//func (c *CacheWriter) writeError(err error) {
-//	_ = ioutil.WriteFile(c.filename()+".log", []byte(err.Error()), 0644)
-//}
 
 func (c *CacheWriter) saveWorker() {
 	for {
 		select {
 		case <-c.Done:
-			time.Sleep(time.Second)
 			if c.Index > 0 {
-				if err := c.Cache.SaveToFileConcurrent(c.filename(), 0); err != nil {
-					//c.writeError(err)
+				//_ = c.Cache.SaveToFileConcurrent(c.filename(), 0)
+				q, _ := queue.OpenQueue(c.filename())
+				for i := uint32(1); i <= c.Index; i++ {
+					dst := make([]byte, 0)
+					buf := c.Get(dst, FromInt(i))
+					_, _ = q.Enqueue(buf)
 				}
+				_ = q.Close()
 			}
 			return
 		}
