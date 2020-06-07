@@ -178,7 +178,7 @@ func (c *CacheWriter) Write(p []byte) (n int, err error) {
 }
 
 func (c *CacheWriter) filename() string {
-	t := f.NewTimeStamp(c.Start).LocalTimeStampString()[0:14]
+	t := f.NewTimeStamp(c.Start).LocalTimeStampString(true)
 	return filepath.Join(CacheDataDirName, fmt.Sprintf("%s.%d", t, c.Index))
 }
 

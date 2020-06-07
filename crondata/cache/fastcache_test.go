@@ -9,8 +9,8 @@ import (
 	"time"
 )
 
-// go test -v -cpu=4 -benchtime=15s -benchmem -bench=^BenchmarkCacheWriter$ github.com/angenalZZZ/gotool/crondata/cache
-// go test -c -o %TEMP%\t01.exe github.com/angenalZZZ/gotool/crondata/cache && %TEMP%\t01.exe -test.v -test.bench ^BenchmarkCacheWriter$ -test.run ^$
+// go test -v -cpu=4 -benchtime=15s -benchmem -bench=^BenchmarkCacheWriter$ -run ^none$ github.com/angenalZZZ/gotool/crondata/cache
+// go test -c -o %TEMP%\t01.exe github.com/angenalZZZ/gotool/crondata/cache && %TEMP%\t01.exe -test.v -test.bench ^BenchmarkCacheWriter$ -test.run ^none$
 func BenchmarkCacheWriter(b *testing.B) {
 	b.StopTimer()
 	InitCacheBackgroundWorker(10 * time.Second)
