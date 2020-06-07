@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"encoding/binary"
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
 	"github.com/angenalZZZ/gofunc/data/cache/fastcache"
@@ -32,7 +31,7 @@ var (
 	CacheWriterIndex = time.Now().Unix()
 	CacheWriteMapper = map[int64]*CacheWriter{}
 	// cache persist to disk directory
-	CacheDataDirName = GetCurrentDir()
+	CacheDataDirName = f.CurrentDir()
 	// period of cache, beyond which it will be automatically persisted to disk
 	CacheRenewFile = time.Minute
 	// cycle of message processing
@@ -143,7 +142,7 @@ func (c *CacheWriter) ReadAll(endTime time.Time, maxNum uint32) (count int) {
 		}
 
 		dst := make([]byte, 0)
-		buf := c.Get(dst, FromInt(i))
+		buf := c.Get(dst, f.BytesUint32(i))
 		if len(buf) <= 0 {
 			count++
 			continue
@@ -174,12 +173,12 @@ func (c *CacheWriter) ReadAll(endTime time.Time, maxNum uint32) (count int) {
 
 func (c *CacheWriter) Write(p []byte) (n int, err error) {
 	i := atomic.AddUint32(&c.Index, 1)
-	c.Cache.Set(FromInt(i), p)
+	c.Cache.Set(f.BytesUint32(i), p)
 	return int(i), nil
 }
 
 func (c *CacheWriter) filename() string {
-	t := f.TimeStampFrom(f.ToString(c.Start)).LocalTimeStampString()[0:14]
+	t := f.NewTimeStamp(c.Start).LocalTimeStampString()[0:14]
 	return filepath.Join(CacheDataDirName, fmt.Sprintf("%s.%d", t, c.Index))
 }
 
@@ -188,11 +187,10 @@ func (c *CacheWriter) saveWorker() {
 		select {
 		case <-c.Done:
 			if c.Index > 0 {
-				//_ = c.Cache.SaveToFileConcurrent(c.filename(), 0)
 				q, _ := queue.OpenQueue(c.filename())
 				for i := uint32(1); i <= c.Index; i++ {
 					dst := make([]byte, 0)
-					buf := c.Get(dst, FromInt(i))
+					buf := c.Get(dst, f.BytesUint32(i))
 					_, _ = q.Enqueue(buf)
 				}
 				_ = q.Close()
@@ -200,24 +198,4 @@ func (c *CacheWriter) saveWorker() {
 			return
 		}
 	}
-}
-
-// GetCurrentDir helper function
-func GetCurrentDir() (basePath string) {
-	basePath, _ = filepath.Abs(os.Args[0])
-	basePath = filepath.Dir(basePath)
-	return
-}
-
-// FromInt helper function which converts a int to a []byte in Big Endian
-func FromInt(v uint32) []byte {
-	b := make([]byte, 4)
-	binary.BigEndian.PutUint32(b, v)
-	return b
-}
-
-// ToInt helper function which converts a big endian []byte to an int
-func ToInt(data []byte) uint32 {
-	v := binary.BigEndian.Uint32(data)
-	return v
 }
