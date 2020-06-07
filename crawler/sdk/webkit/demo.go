@@ -3,17 +3,16 @@ package main
 import (
 	"flag"
 	"fmt"
+	"github.com/gotk3/gotk3/glib"
+	"github.com/gotk3/gotk3/gtk"
+	"github.com/sourcegraph/go-webkit2/webkit2"
+	"github.com/sqs/gojs"
 	"io/ioutil"
 	"log"
 	"net/url"
 	"os"
 	"runtime"
 	"strings"
-
-	"github.com/gotk3/gotk3/glib"
-	"github.com/gotk3/gotk3/gtk"
-	"github.com/sourcegraph/go-webkit2/webkit2"
-	"github.com/sqs/gojs"
 )
 
 // set GOOS=linux
@@ -76,7 +75,7 @@ func main() {
 	_, _ = webView.Connect("load-changed", func(_ *glib.Object, loadEvent webkit2.LoadEvent) {
 		switch loadEvent {
 		case webkit2.LoadFinished:
-			webView.RunJavaScript(script, func(val *gojs.Value, err error) {
+			resultCallback := func(val *gojs.Value, err error) {
 				if err != nil {
 					logErr.Fatalf("javascript error: %s", err)
 				} else {
@@ -88,12 +87,12 @@ func main() {
 						fmt.Println(string(json))
 					}
 				}
-				if strings.Index(script, "(function") == 0 {
-					<-make(chan struct{})
-				} else {
-					gtk.MainQuit()
-				}
-			})
+				gtk.MainQuit()
+			}
+			if strings.Index(script, ";") == 0 || strings.Index(script, "(function") == 0 {
+				resultCallback = nil
+			}
+			webView.RunJavaScript(script, resultCallback)
 		}
 	})
 

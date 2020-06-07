@@ -10,13 +10,14 @@ import (
 	"log"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 )
 
 // set GOARCH=386 // option
 // go build -ldflags="-s -w -H windowsgui" -o ../ejs.exe ./crawler/sdk/blink/demo.go
 // go build -tags="bdebug" -ldflags="-s -w -H windowsgui" -o ../ejs.exe ./crawler/sdk/blink/demo.go
-// ejs.exe "http://app1.nmpa.gov.cn/datasearchcnda/face3/base.jsp?tableId=25&tableName=TABLE25&title=%B9%FA%B2%FA%D2%A9%C6%B7&bcId=152904713761213296322795806604" "A:\go\src\github.com\angenalZZZ\gotool\crawler\sdk\blink\demo.js"
+// ejs.exe "http://app1.nmpa.gov.cn/datasearchcnda/face3/base.jsp?tableId=25&tableName=TABLE25&title=%B9%FA%B2%FA%D2%A9%C6%B7&bcId=152904713761213296322795806604" ./demo.js
 func main() {
 	flag.Usage = func() {
 		fmt.Fprintln(os.Stderr)
@@ -96,6 +97,12 @@ func main() {
 		_ = mainWebView.GetWebTitle()
 		if script != "" {
 			time.Sleep(2 * time.Second)
+			if strings.Index(script, ";") == 0 || strings.Index(script, "(function") == 0 {
+				if _, err := mainWebView.Invoke(script); err != nil {
+					logErr.Print(err)
+				}
+				return
+			}
 			if result, err := mainWebView.Invoke(script); err != nil {
 				logErr.Print(err)
 			} else {
