@@ -19,6 +19,8 @@ import (
 // SET CC=x86_64-w64-mingw32-gcc
 // SET GOOS=windows
 // SET GOARCH=amd64
+// rsrc -ico icon.ico -o ejs.syso # 生成包含图标的coff文件;然后,编译时会自动连接之前生成的coff文件;如下:
+// go build -ldflags="-s -w -H windowsgui -linkmode internal" -o ../ejs.exe ./crawler/sdk/blink/demo.go
 // go build -ldflags="-s -w -H windowsgui" -o ../ejs.exe ./crawler/sdk/blink/demo.go
 // go build -tags="bdebug" -ldflags="-s -w -H windowsgui" -o ../ejs.exe ./crawler/sdk/blink/demo.go
 // ejs.exe "http://app1.nmpa.gov.cn/datasearchcnda/face3/base.jsp?tableId=25&tableName=TABLE25&title=%B9%FA%B2%FA%D2%A9%C6%B7&bcId=152904713761213296322795806604" ./demo.js
